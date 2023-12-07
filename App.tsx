@@ -5,94 +5,69 @@
  * @format
  */
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import React, {useEffect, useRef} from 'react';
+import {getStateFromPath, NavigationContainer} from '@react-navigation/native';
+import {StyleSheet} from 'react-native';
+import {persistor, store} from './src/redux/store/store';
+import {Provider} from 'react-redux';
+import {Host} from 'react-native-portalize';
+import {navigationRef} from 'navigation/utils';
+import {CardStyleInterpolators, createStackNavigator} from '@react-navigation/stack';
+import UnauthenticatedRoute from './src/navigation/UnathenticatedRoute';
+import DrawerNavigation from './src/navigation/DrawerNavigation';
+import {useAppDispatch, useAppSelector} from '@hooks/useActions';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {PersistGate} from 'redux-persist/integration/react';
+import SplashScreen from 'screens/SplashScreen';
+import {initializingStart} from './src/redux/features/appSlice/index';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
-
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+const Stack = createStackNavigator();
 
 function App(): JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  // Use the below variable to navigate between screens outside of the navigation tree if you have need for it
+  const {isInitializing}: any = useAppSelector(state => state?.app);
+  const isAuthenticated = useAppSelector(state => state.auth?.isAuthenticated);
+  const routeNameRef = useRef<any>(null);
+  const dispatch = useAppDispatch();
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
+  async function setupApp() {
+    // call app initialization functions here
+    await dispatch(initializingStart());
+  }
+
+  useEffect(() => {
+    setupApp();
+  }, []);
+
+  if (isInitializing) {
+    return <SplashScreen />;
+  }
 
   return (
-    <SafeAreaView style={styles.background}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <GestureHandlerRootView style={{flex: 1}}>
+      <Provider store={store}>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={() => (routeNameRef.current = navigationRef?.current?.getCurrentRoute()?.name)}>
+          <Host>
+            {/* <CustomToast />
+          <ErrorBoundary> */}
+            <Stack.Navigator
+              screenOptions={{
+                headerShown: false, // Hide the header
+                cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS, // Page-to-page transition
+              }}>
+              {isAuthenticated ? (
+                <Stack.Screen name="AuthenticatedRoutes" component={DrawerNavigation} />
+              ) : (
+                <Stack.Screen name="UnauthenticatedRoutes" component={UnauthenticatedRoute} />
+              )}
+            </Stack.Navigator>
+          </Host>
+        </NavigationContainer>
+      </Provider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -119,4 +94,16 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+const RootInstance = () => {
+  return (
+    <SafeAreaProvider>
+      <Provider store={store}>
+        <PersistGate loading={null} persistor={persistor}>
+          <App />
+        </PersistGate>
+      </Provider>
+    </SafeAreaProvider>
+  );
+};
+
+export default RootInstance;
